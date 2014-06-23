@@ -4,14 +4,14 @@
 
 #
 #DEBUG=y
-PYV=$(shell python -c "import sys;t='{v[0]}.{v[1]}'.format(v=list(sys.version_info[:2]));sys.stdout.write(t)")
+PYTHON_VERSION=$(shell python -c "import sys;t='{v[0]}.{v[1]}'.format(v=list(sys.version_info[:2]));sys.stdout.write(t)")
+PPPD_VERSON=$(shell pppd --version 2>&1 | cut -d' ' -f3  | tr -d '\n')
 PLUGIN=pppd_pyhook.so
-PPPV=2.4.5
-DESTINATION=/usr/lib64/pppd/$(PPPV)
+DESTINATION=/usr/lib64/pppd/$(PPPD_VERSION)
 CC=gcc
 LD=ld 
-CFLAGS=-I/usr/include/pppd -I/usr/include/python$(PYV) -O2 -fPIC
-LDFLAGS=-lc -lpython$(PYV)
+CFLAGS=-I/usr/include/pppd -I/usr/include/python$(PYTHON_VERSION) -O2 -fPIC
+LDFLAGS=-lc -lpython$(PYTHON_VERSION)
 
 ifdef DEBUG
 CFLAGS += -DDEBUG=1
