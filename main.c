@@ -1,8 +1,7 @@
 /*******************************************************************
 * main.c
 *
-* CHAP via Shell plugin for pppd. Validates the supplied username and 
-* password via a shell script.
+* A plugin for pppd that allows for pppd hooks to be implemented in python
 *
 ********************************************************************/
 
