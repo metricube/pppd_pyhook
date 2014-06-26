@@ -169,7 +169,7 @@ int pyinit() {
         error("Unable to init pppd_stderr");
     } else {
         #ifdef DEBUG
-        info("Set stdout to m_stderr"); 
+        info("Set stderr to m_stderr"); 
         #endif         
         
         PySys_SetObject("stderr", m_stderr);    
