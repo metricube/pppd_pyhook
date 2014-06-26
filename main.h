@@ -9,6 +9,5 @@ static int chap_verify_wrapper(char *name, char *ourname, int id,
 
 static int chap_check_wrapper(void);
 static int allowed_address_wrapper(u_int32_t addr);
-
-char* get_PyError();
+static void generic_notifier_wrapper(void *opaque, int arg);
 PyObject* get_PyFunc(char *name);

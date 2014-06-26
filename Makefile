@@ -5,7 +5,7 @@
 #
 #DEBUG=y
 PYTHON_VERSION=$(shell python -c "import sys;t='{v[0]}.{v[1]}'.format(v=list(sys.version_info[:2]));sys.stdout.write(t)")
-PPPD_VERSON=$(shell pppd --version 2>&1 | cut -d' ' -f3  | tr -d '\n')
+PPPD_VERSION=$(shell pppd --version 2>&1 | cut -d' ' -f3  | tr -d '\n')
 PLUGIN=pppd_pyhook.so
 DESTINATION=/usr/lib64/pppd/$(PPPD_VERSION)
 CC=gcc

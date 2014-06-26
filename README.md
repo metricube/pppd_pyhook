@@ -1,7 +1,7 @@
 pppd_pyhook
 =========
 
-A plugin for pppd that allows for pppd hooks to be implemented in python.  Currently it defines hooks sufficient to use an alternative CHAP secret provider.
+A plugin for pppd that allows for pppd hooks and notifications to be implemented in python.  Currently it defines hooks sufficient to use an alternative CHAP secret provider.
 
 ## Installation
 
@@ -19,7 +19,7 @@ A plugin for pppd that allows for pppd hooks to be implemented in python.  Curre
  - This will install pyhook.so in to /usr/lib64/pppd/_ppp-version_
  - Install hooks.py in to /etc/ppp/hooks.py
 
- - To load the module - edit the appropriate /etc/ppp/options.xx file
+ - To load the module add the following line to /etc/ppp/options.xxx file
 
         plugin pyhook.so
 
@@ -30,5 +30,4 @@ Edit /etc/ppp/hooks.py as required
 
 ## Troubleshooting & Limitations
  - Tested on CentOS6 x86_64 only
- - Uncaught python exceptions do not seem to always get shown in the pppd log file
  - Spurious errors.  Check if SELinux is enabled.  It limits greatly what pppd (and hence the python hooks) can do.  Check the SELinux audit log (/var/log/audit/audit.log)

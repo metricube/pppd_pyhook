@@ -13,12 +13,15 @@
 #include <string.h>
 #include <sys/types.h>
 
-#define _PATH_PYHOOKS		"hooks.py"
-#define _PY_MODULE		"hooks"
-#define NO_ERROR		"No error message available"
+#define _PATH_PYHOOKS       "hooks.py"
+#define _PY_MODULE      "hooks"
 
 char pppd_version[] = VERSION;
 PyObject *pModule = NULL;
+
+// Buffers so our logs are readable
+char stderr_buf[256] = {0};
+char stdout_buf[256] = {0};
 
 /*
  * Initialize the PPPD plugin
@@ -26,6 +29,7 @@ PyObject *pModule = NULL;
 int plugin_init() {
     pyinit();
 
+    /* Hooks */
     if (has_PyFunc("get_secret_for_user")) {
         chap_verify_hook = chap_verify_wrapper;
         info("pyhook: chap_check_hook => get_secret_for_user");
@@ -40,8 +44,105 @@ int plugin_init() {
         allowed_address_hook = allowed_address_wrapper;
         info("pyhook: added hook allowed_address_hook");
     }
+    
+    /* Notifications */
+    if (has_PyFunc("ip_up_notifier")) {
+        add_notifier(&ip_up_notifier, generic_notifier_wrapper, "ip_up_notifier");
+        info("pyhook: added notifier ip_up_notifier");
+    }    
+
+    if (has_PyFunc("ip_down_notifier")) {
+        add_notifier(&ip_down_notifier, generic_notifier_wrapper, "ip_down_notifier");
+        info("pyhook: added notifier ip_down_notifier");
+    }
+    
+    if (has_PyFunc("auth_up_notifier")) {
+        add_notifier(&auth_up_notifier, generic_notifier_wrapper, "auth_up_notifier");
+        info("pyhook: added notifier auth_up_notifier");
+    }  
+
+    if (has_PyFunc("link_down_notifier")) {
+        add_notifier(&link_down_notifier, generic_notifier_wrapper, "link_down_notifier");
+        info("pyhook: added notifier link_down_notifier");
+    }      
+    
     info("pyhook: plugin initialized.");
 }
+
+
+/*
+ * Method to redirect python stderr / stdout to pppd logging.  This allows
+ * for standard Python error reporting output.
+ */
+static PyObject *
+pppd_stderr_write(PyObject *self, PyObject *args) {
+    char *what;
+    int len, buf_len;
+    int newline = 0;
+    
+    if (!PyArg_ParseTuple(args, "s", &what))
+        return NULL;
+     
+    len = strlen(what);
+    if(len > 0 && what[len-1] == '\n') {
+        newline = 1;
+    }
+    
+    if(newline || (strlen(stderr_buf) + len) > sizeof stderr_buf) {
+        if(strlen(stderr_buf) > 0) {
+            error("%s%s", stderr_buf, what);      
+        } else {
+            error("%s", what);      
+        }
+        stderr_buf[0] = '\0';
+    } else {
+        buf_len = strlen(stderr_buf);        
+        strncat(stderr_buf + buf_len, what, len);
+    }
+
+    return Py_BuildValue("");
+}
+
+static PyMethodDef pppd_stderr_methods[] = {
+    {"write", pppd_stderr_write, METH_VARARGS, "Write STDERR"},
+    {NULL, NULL, 0, NULL}
+};
+
+static PyObject *
+pppd_stdout_write(PyObject *self, PyObject *args) {
+    char *what;
+    int len, buf_len;
+    int newline = 0;
+    
+    if (!PyArg_ParseTuple(args, "s", &what))
+        return NULL;
+     
+    len = strlen(what);
+    if(len > 0 && what[len-1] == '\n') {
+        newline = 1;
+    }
+    
+    if(newline || (strlen(stdout_buf) + len) > sizeof stdout_buf) {
+        if(strlen(stdout_buf) > 0) {
+            error("%s%s", stdout_buf, what);      
+        } else {
+            error("%s", what);      
+        }
+        stdout_buf[0] = '\0';
+    } else {
+        buf_len = strlen(stdout_buf);        
+        strncat(stdout_buf + buf_len, what, len);
+    }
+
+    return Py_BuildValue("");
+}
+
+static PyMethodDef pppd_stdout_methods[] = {
+    {"write", pppd_stdout_write, METH_VARARGS, "Write STDOUT"},
+    {NULL, NULL, 0, NULL}
+};
+
+
 
 /*
  * Load our python module 
@@ -50,35 +151,41 @@ int pyinit() {
     char *err;
     Py_Initialize();
 
+    // Redirect stdout/stderr - this will also give us our
+    // python error debugging    
+    PyObject *m_stdout = Py_InitModule("pppd_stdout", pppd_stdout_methods);
+    if (m_stdout == NULL) { 
+        error("Unable to init pppd_stdout");
+    } else {
+        #ifdef DEBUG
+        info("Set stdout to m_stdout"); 
+        #endif        
+        
+        PySys_SetObject("stdout", m_stdout);
+    }
+
+    PyObject *m_stderr = Py_InitModule("pppd_stderr", pppd_stderr_methods);
+    if (m_stderr == NULL) {
+        error("Unable to init pppd_stderr");
+    } else {
+        #ifdef DEBUG
+        info("Set stdout to m_stderr"); 
+        #endif         
+        
+        PySys_SetObject("stderr", m_stderr);    
+    }
+    
+    // Load the /etc/ppp/hooks.py file
     PyObject *sysPath = PySys_GetObject("path");
     PyObject *path = PyString_FromString(_PATH_VARRUN);
     int result = PyList_Insert(sysPath, 0, path);
     pModule = PyImport_ImportModule(_PY_MODULE);
 
     if (pModule == NULL) {
-	err = get_PyError();	
-	error("Failed to load Python module %s%s (%s)", _PATH_VARRUN, _PATH_PYHOOKS, err);
-	Py_Finalize();
-	exit(1);
-    }	
-}
-
-
-/*
- * Get the Python error message
- * Return char* err message.  Never NULL
- */
-char* get_PyError() {
-    char* err;
-    PyObject *ptype, *pvalue, *ptraceback;
-    PyErr_Fetch(&ptype, &pvalue, &ptraceback);
-    if(ptraceback != NULL) {
-	err = PyString_AsString(pvalue);
-	if(err != NULL) {
-	    return err;
-	}
-    }
-    return NO_ERROR;
+        PyErr_Print();
+        Py_Finalize();
+        exit(1);
+    }   
 }
 
 /*
@@ -88,6 +195,7 @@ PyObject* get_PyFunc(char *name) {
     #ifdef DEBUG
     info("get_PyFunc(%s)", name);
     #endif
+    
     PyObject *pFunc;
     char *err;
     pFunc = PyObject_GetAttrString(pModule, name);
@@ -97,8 +205,7 @@ PyObject* get_PyFunc(char *name) {
     }
 
     if (PyErr_Occurred()) {
-	err = get_PyError();
-        error("Error loading python function \"%s\" (%s)", name, err);
+        PyErr_Print();
     } else {
         error("Cannot find python function \"%s\"", name);
     }
@@ -118,7 +225,7 @@ int has_PyFunc(char *name) {
 
     if (pFunc && PyCallable_Check(pFunc)) {
         Py_XDECREF(pFunc);
-	return 1;
+        return 1;
     }
     return 0;
 }
@@ -134,14 +241,13 @@ int has_PyFunc(char *name) {
  *
  */
 static int chap_verify_wrapper(char *name, char *ourname, int id,
-			struct chap_digest_type *digest,
-			unsigned char *challenge, unsigned char *response,
-			char *message, int message_space)
+            struct chap_digest_type *digest,
+            unsigned char *challenge, unsigned char *response,
+            char *message, int message_space)
 {   
 
     int ok = 0;
     char* secret;
-    char* err;
     PyObject *pFunc, *pValue, *pArgs;
 
     pFunc = get_PyFunc("get_secret_for_user");
@@ -153,25 +259,21 @@ static int chap_verify_wrapper(char *name, char *ourname, int id,
     pValue = PyObject_CallObject(pFunc, pArgs);
     Py_DECREF(pArgs);
     if (pValue == NULL) {
-	err = get_PyError();
-	error("Call to \"get_secret_for_user\" failed (%s)", err);
+        PyErr_Print();
     } else {
         secret = PyString_AsString(pValue);
-        info("Result of call: %s\n", secret);
+        int secret_len = strlen(secret);
 
-	// We got a result - calculate the response as necessary
-    	int secret_len = strlen(secret);
-
-	// reuse the digest to calculate a peer response
-    	ok = digest->verify_response(id, name, secret, secret_len, challenge,
-	         response, message, message_space);
-		
+        // reuse the digest to calculate a peer response
+        ok = digest->verify_response(id, name, secret, secret_len, challenge,
+             response, message, message_space);
+        
         Py_DECREF(pValue);
     }
 
     #ifdef DEBUG
     info("Checking CHAP with name:%s ourname:%s id:%d digest_code:%x message:%s", 
-	name, ourname, id, digest->code, challenge, response, message);
+    name, ourname, id, digest->code, challenge, response, message);
     #endif
 
     Py_XDECREF(pFunc);
@@ -183,7 +285,6 @@ static int chap_verify_wrapper(char *name, char *ourname, int id,
  */
 static int chap_check_wrapper(void) {
     int result = 0;
-    char* err;
     PyObject *pFunc, *pValue, *pArgs;
 
     pFunc = get_PyFunc("chap_check_hook");
@@ -191,11 +292,10 @@ static int chap_check_wrapper(void) {
     pValue = PyObject_CallObject(pFunc, pArgs);
     Py_DECREF(pArgs);
     if (pValue == NULL) {
-        err = get_PyError();
-        error("Call to \"chap_check_hook\" failed (%s)", err);
+        PyErr_Print();
     } else {
-	result = (pValue == Py_True);
-	Py_DECREF(pValue);
+        result = (pValue == Py_True);
+        Py_DECREF(pValue);
     }
 
     Py_XDECREF(pFunc);
@@ -207,7 +307,6 @@ static int chap_check_wrapper(void) {
  */
 static int allowed_address_wrapper(u_int32_t addr) {
     int result = 0;
-    char* err;
     PyObject *pFunc, *pValue, *pArgs;
 
     pFunc = get_PyFunc("allowed_address_hook");
@@ -218,15 +317,32 @@ static int allowed_address_wrapper(u_int32_t addr) {
     pValue = PyObject_CallObject(pFunc, pArgs);
     Py_DECREF(pArgs);
     if (pValue == NULL) {
-        err = get_PyError();
-        error("Call to \"allowed_address_hook\" failed (%s)", err);
+        PyErr_Print();
     } else {
-	result = (pValue == Py_True);
-	Py_DECREF(pValue);
+        result = (pValue == Py_True);
+        Py_DECREF(pValue);
     }
 
     Py_XDECREF(pFunc);
     return result;
 }
 
+
+static void generic_notifier_wrapper(void *opaque, int arg) {
+    PyObject *pFunc, *pValue, *pArgs;
+    pFunc = get_PyFunc((char*)opaque);
+    pArgs = PyTuple_New(1);
+    pValue = PyInt_FromSize_t(arg);
+    PyTuple_SetItem(pArgs, 0, pValue);
+    
+    pValue = PyObject_CallObject(pFunc, pArgs);
+    Py_DECREF(pArgs);
+    if (pValue == NULL) {
+        PyErr_Print();
+    } else {
+        Py_DECREF(pValue);
+    }
+
+    Py_XDECREF(pFunc);
+}
 
