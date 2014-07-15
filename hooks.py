@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
-def get_secret_for_user(user):
-    print "Looking up user %s" % user
+def get_secret_for_user(user, ipparam):
+    print "Looking up user %s with ipparam %s" % (user, ipparam)
     return "user_secret"
 
 def allowed_address_hook(ip):

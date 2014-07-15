@@ -251,10 +251,12 @@ static int chap_verify_wrapper(char *name, char *ourname, int id,
     PyObject *pFunc, *pValue, *pArgs;
 
     pFunc = get_PyFunc("get_secret_for_user");
-    pArgs = PyTuple_New(1);
+    pArgs = PyTuple_New(2);
     pValue = PyString_FromString(name);
     PyTuple_SetItem(pArgs, 0, pValue);
-
+    pValue = PyString_FromString(ipparam);
+    PyTuple_SetItem(pArgs, 1, pValue);
+    
     // call the function
     pValue = PyObject_CallObject(pFunc, pArgs);
     Py_DECREF(pArgs);
