@@ -149,7 +149,9 @@ static PyMethodDef pppd_stdout_methods[] = {
  */
 int pyinit() {
     char *err;
+    char *argv[] = { "pppd_pyhook", NULL };
     Py_Initialize();
+    PySys_SetArgvEx(0, argv, 0);
 
     // Redirect stdout/stderr - this will also give us our
     // python error debugging    
