@@ -376,6 +376,9 @@ static void py_ip_up_notifier(void *pyfunc, int arg) {
 
 	PyObject *pFunc = get_PyFunc((char*)pyfunc);
 	PyObject *pValue = PyObject_CallObject(pFunc, pArgs);
+	Py_DECREF(pIFName);
+	Py_DECREF(pOurAddr);
+	Py_DECREF(pHisAddr);
 	Py_DECREF(pArgs);
 	if (pValue == NULL) {
 		PyErr_Print();
