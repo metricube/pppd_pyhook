@@ -6,12 +6,19 @@
 ********************************************************************/
 
 #include <Python.h>
-#include "pppd.h"
-#include "pathnames.h"
-#include "main.h"
-#include <sys/wait.h>
 #include <string.h>
 #include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+#include <pppd/pppd.h>
+#include <pppd/pathnames.h>
+#include <pppd/fsm.h>
+#include <pppd/ipcp.h>
+
+#include "main.h"
 
 #define _PATH_PYHOOKS       "hooks.py"
 #define _PY_MODULE      "hooks"
@@ -47,7 +54,7 @@ int plugin_init() {
     
     /* Notifications */
     if (has_PyFunc("ip_up_notifier")) {
-        add_notifier(&ip_up_notifier, generic_notifier_wrapper, "ip_up_notifier");
+        add_notifier(&ip_up_notifier, py_ip_up_notifier, "ip_up_notifier");
         info("pyhook: added notifier ip_up_notifier");
     }    
 
@@ -350,3 +357,33 @@ static void generic_notifier_wrapper(void *opaque, int arg) {
     Py_XDECREF(pFunc);
 }
 
+static void py_ip_up_notifier(void *pyfunc, int arg) {
+	ipcp_options opts = ipcp_gotoptions[0];
+	ipcp_options peer = ipcp_hisoptions[0];
+
+	PyObject *pArgs = PyTuple_New(3);
+
+	PyObject *pIFName = PyString_FromString(ifname);
+	PyTuple_SetItem(pArgs, 0, pIFName);
+
+	char *ouraddr = inet_ntoa((*(struct in_addr *) &opts.ouraddr));
+	PyObject *pOurAddr = PyString_FromString(ouraddr);
+	PyTuple_SetItem(pArgs, 1, pOurAddr);
+
+	char *hisaddr = inet_ntoa((*(struct in_addr *) &opts.hisaddr));
+	PyObject *pHisAddr = PyString_FromString(hisaddr);
+	PyTuple_SetItem(pArgs, 2, pHisAddr);
+
+	PyObject *pFunc = get_PyFunc((char*)pyfunc);
+	PyObject *pValue = PyObject_CallObject(pFunc, pArgs);
+	Py_DECREF(pIFName);
+	Py_DECREF(pOurAddr);
+	Py_DECREF(pHisAddr);
+	Py_DECREF(pArgs);
+	if (pValue == NULL) {
+		PyErr_Print();
+	} else {
+		Py_DECREF(pValue);
+	}
+	Py_XDECREF(pFunc);
+}
