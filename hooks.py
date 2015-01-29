@@ -10,7 +10,7 @@ def allowed_address_hook(ip):
 def chap_check_hook():
     return True
 
-def ip_up_notifier(arg):
+def ip_up_notifier(ifname, ouraddr, hisaddr):
     print "ip_up_notifier"
 
 def ip_down_notifier(arg):
