@@ -21,7 +21,7 @@ $(PLUGIN):
 
 install: all
 	install -o root -g root -m 0755 $(PLUGIN) $(PLUGINDIR)
-	install -o root -g root -m 0755 $(HOOKS) $(HOOKSDIR)
+	install -o root -g root -m 0644 $(HOOKS) $(HOOKSDIR)
 	#chcon -t pppd_exec_t $(PLUGINDIR)/$(PLUGIN)
 	#chcon -t pppd_exec_t $(HOOKSDIR)/$(HOOKS)
 
