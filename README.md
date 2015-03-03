@@ -1,5 +1,4 @@
-pppd_pyhook
-=========
+# pppd_pyhook
 
 A plugin for pppd that allows for pppd hooks and notifications to be implemented in python.  Currently it defines hooks sufficient to use an alternative CHAP secret provider.
 
@@ -24,10 +23,12 @@ A plugin for pppd that allows for pppd hooks and notifications to be implemented
         plugin pyhook.so
 
 ## Usage
-Edit /etc/ppp/hooks.py as required 
+
+Edit /etc/ppp/hooks.py as required
 
  - If you don't want a particular hook defined - rename/remove it from hooks.py
 
 ## Troubleshooting & Limitations
- - Tested on CentOS6 x86_64 only
+
+ - Tested on CentOS6 and Ubuntu x86_64 only
  - Spurious errors.  Check if SELinux is enabled.  It limits greatly what pppd (and hence the python hooks) can do.  Check the SELinux audit log (/var/log/audit/audit.log)
