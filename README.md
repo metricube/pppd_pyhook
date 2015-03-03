@@ -36,7 +36,7 @@ Build and install:
 Make sure to load the `pyhook.so` plugin in `/etc/ppp/options[.xxx]` by
 adding the following line to it:
 
-        plugin pyhook.so
+	plugin pyhook.so
 
 ## Troubleshooting & Limitations
 
