@@ -1,15 +1,16 @@
-/*******************************************************************
+/*
  * main.c
  *
- * A plugin for pppd that allows for pppd hooks to be implemented in python
+ * A plugin for pppd that allows for pppd hooks to be implemented in python.
  *
- ********************************************************************/
+ */
 
 #include <Python.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
@@ -17,8 +18,7 @@
 #include <pppd/pathnames.h>
 #include <pppd/fsm.h>
 #include <pppd/ipcp.h>
-
-#include "main.h"
+#include <pppd/chap-new.h>
 
 #define _PATH_PYHOOKS	"hooks.py"
 #define _PY_MODULE	"hooks"
@@ -26,14 +26,26 @@
 char pppd_version[] = VERSION;
 PyObject *pModule = NULL;
 
-// Buffers so our logs are readable
+// Buffers so our logs are readable.
 char stderr_buf[256] = {0};
 char stdout_buf[256] = {0};
+
+// Our functions.
+int pyinit(void);
+int has_PyFunc(char *name);
+PyObject* get_PyFunc(char *name);
+static int chap_check_wrapper(void);
+static int allowed_address_wrapper(u_int32_t addr);
+static void generic_notifier_wrapper(void *opaque, int arg);
+static void py_ip_up_notifier(void *pyfunc, int arg);
+static int chap_verify_wrapper(char *name, char *ourname, int id,
+	struct chap_digest_type *digest, unsigned char *challenge,
+	unsigned char *response, char *message, int message_space);
 
 /*
  * Initialize the PPPD plugin
  */
-int plugin_init() {
+int plugin_init(void) {
 	pyinit();
 
 	/* Hooks */
@@ -74,6 +86,7 @@ int plugin_init() {
 	}
 
 	info("pyhook: plugin initialized.");
+	return 0;
 }
 
 
@@ -154,8 +167,7 @@ static PyMethodDef pppd_stdout_methods[] = {
 /*
  * Load our python module
  */
-int pyinit() {
-	char *err;
+int pyinit(void) {
 	char *argv[] = { "pppd_pyhook", NULL };
 	Py_Initialize();
 	PySys_SetArgvEx(0, argv, 0);
@@ -166,7 +178,7 @@ int pyinit() {
 	if (m_stdout == NULL) {
 		error("Unable to init pppd_stdout");
 	} else {
-#ifdef DEBUG
+#ifdef HOOKSDEBUG
 		info("Set stdout to m_stdout");
 #endif
 
@@ -177,7 +189,7 @@ int pyinit() {
 	if (m_stderr == NULL) {
 		error("Unable to init pppd_stderr");
 	} else {
-#ifdef DEBUG
+#ifdef HOOKSDEBUG
 		info("Set stderr to m_stderr");
 #endif
 
@@ -187,7 +199,7 @@ int pyinit() {
 	// Load the /etc/ppp/hooks.py file
 	PyObject *sysPath = PySys_GetObject("path");
 	PyObject *path = PyString_FromString(_PATH_VARRUN);
-	int result = PyList_Insert(sysPath, 0, path);
+	PyList_Insert(sysPath, 0, path);
 	pModule = PyImport_ImportModule(_PY_MODULE);
 
 	if (pModule == NULL) {
@@ -195,18 +207,19 @@ int pyinit() {
 		Py_Finalize();
 		exit(1);
 	}
+
+	return 0;
 }
 
 /*
  * Get a python function if it exists
  */
 PyObject* get_PyFunc(char *name) {
-#ifdef DEBUG
+#ifdef HOOKSDEBUG
 	info("get_PyFunc(%s)", name);
 #endif
 
 	PyObject *pFunc;
-	char *err;
 	pFunc = PyObject_GetAttrString(pModule, name);
 
 	if (pFunc && PyCallable_Check(pFunc)) {
@@ -225,7 +238,7 @@ PyObject* get_PyFunc(char *name) {
  * Check if python function exists
  */
 int has_PyFunc(char *name) {
-#ifdef DEBUG
+#ifdef HOOKSDEBUG
 	info("has_PyFunc(%s)", name);
 #endif
 
@@ -254,7 +267,6 @@ static int chap_verify_wrapper(char *name, char *ourname, int id,
 		unsigned char *challenge, unsigned char *response,
 		char *message, int message_space)
 {
-
 	int ok = 0;
 	char* secret;
 	PyObject *pFunc, *pValue, *pArgs;
@@ -276,13 +288,15 @@ static int chap_verify_wrapper(char *name, char *ourname, int id,
 		int secret_len = strlen(secret);
 
 		// reuse the digest to calculate a peer response
-		ok = digest->verify_response(id, name, secret, secret_len, challenge,
-				response, message, message_space);
+		ok = digest->verify_response(id, name,
+				(unsigned char *) secret,
+				secret_len, challenge, response,
+				message, message_space);
 
 		Py_DECREF(pValue);
 	}
 
-#ifdef DEBUG
+#ifdef HOOKSDEBUG
 	info("Checking CHAP with name:%s ourname:%s id:%d digest_code:%x message:%s",
 			name, ourname, id, digest->code, challenge, response, message);
 #endif
@@ -292,7 +306,7 @@ static int chap_verify_wrapper(char *name, char *ourname, int id,
 }
 
 /* Tells pppd that we will try to authenticate the peer, and not to
- * worry about looking in /etc/ppp/*-secrets
+ * worry about looking in /etc/ppp/$type-secrets
  */
 static int chap_check_wrapper(void) {
 	int result = 0;
@@ -359,7 +373,6 @@ static void generic_notifier_wrapper(void *opaque, int arg) {
 
 static void py_ip_up_notifier(void *pyfunc, int arg) {
 	ipcp_options opts = ipcp_gotoptions[0];
-	ipcp_options peer = ipcp_hisoptions[0];
 
 	PyObject *pArgs = PyTuple_New(3);
 
