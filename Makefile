@@ -1,36 +1,29 @@
-# Makefile for PPPD_PYHOOK plugin
+# Makefile for pppd_pyhook plugin
 #
-# Uncomment this line to get more debug messages
-
-#
+# Uncomment this line to get more debug messages,
+# or run `DEBUG=y make`.
 #DEBUG=y
-PYTHON_VERSION=$(shell python -c "import sys;t='{v[0]}.{v[1]}'.format(v=list(sys.version_info[:2]));sys.stdout.write(t)")
-PPPD_VERSION=$(shell pppd --version 2>&1 | cut -d' ' -f3  | tr -d '\n')
-PLUGIN=pppd_pyhook.so
-DESTINATION=/usr/lib64/pppd/$(PPPD_VERSION)
-CC=gcc
-LD=ld 
-CFLAGS=-I/usr/include/pppd -I/usr/include/python$(PYTHON_VERSION) -O2 -fPIC
-LDFLAGS=-lc -lpython$(PYTHON_VERSION)
+
+HOOKS=hooks.py
+HOOKSDIR=/etc/ppp
+
+PLUGIN=pyhook.so
+PLUGINDIR=/usr/lib*/pppd/*/
 
 ifdef DEBUG
-CFLAGS += -DDEBUG=1
+HOOKSDEBUG=CFLAGS=-DHOOKSDEBUG=1
 endif
 
-all : $(PLUGIN) 
+all: $(PLUGIN)
 
-pppd_pyhook.so: main.o
-	$(LD) -shared -o pppd_pyhook.so main.o $(LDFLAGS)
-
-main.o: main.c
-	$(CC) $(CFLAGS) -c -o main.o main.c
+$(PLUGIN):
+	$(HOOKSDEBUG) python setup.py build_ext --inplace
 
 install: all
-	cp -f pppd_pyhook.so $(DESTINATION)/pyhook.so
-	chcon -t pppd_exec_t $(DESTINATION)/pyhook.so
-	cp -n hooks.py /etc/ppp/hooks.py
-	chcon -t pppd_exec_t /etc/ppp/hooks.py
+	install -o root -g root -m 0755 $(PLUGIN) $(PLUGINDIR)
+	install -o root -g root -m 0644 $(HOOKS) $(HOOKSDIR)
+	#chcon -t pppd_exec_t $(PLUGINDIR)/$(PLUGIN)
+	#chcon -t pppd_exec_t $(HOOKSDIR)/$(HOOKS)
 
 clean:
-	rm -rf $(PLUGIN) *.o *.so *~
-
+	rm -rf build $(PLUGIN)
